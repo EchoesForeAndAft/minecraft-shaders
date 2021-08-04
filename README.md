@@ -1,1 +1,1 @@
-# vanilla-optifine-shaders
+# minecraft-shaders
