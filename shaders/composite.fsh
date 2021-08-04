@@ -1,12 +1,71 @@
-#version 120
+#version 330
 
-uniform sampler2D gcolor;
+#include "lib/common.glsl"
+#include "lib/uniforms/deferred.glsl"
+#include "lib/fx/shadows.glsl"
+#include "lib/coords.glsl"
 
-varying vec2 texcoord;
+/* INPUTS */
+in vec2 io_TexCoord;
 
-void main() {
-	vec3 color = texture2D(gcolor, texcoord).rgb;
+/* RENDERTARGETS: 0, 1 */
+layout (location = 0) out vec4 rt_Color;
+layout (location = 1) out vec3 rt_Normal;
 
-/* DRAWBUFFERS:0 */
-	gl_FragData[0] = vec4(color, 1.0); //gcolor
+float GetShadow(vec2 texCoord, float depth)
+{
+    vec4 shadowCoord = ViewToWorldSpace(ScreenToViewSpace(texCoord, depth));
+
+	#ifdef PIXEL_SHADOWS
+	shadowCoord.xyz = round(shadowCoord.xyz * PIXEL_SHADOWS_RESOLUTION) / PIXEL_SHADOWS_RESOLUTION;
+	#endif
+
+    shadowCoord.xyz -= cameraPosition;
+    shadowCoord = shadowModelView * vec4(shadowCoord.xyz, 1.0);
+    shadowCoord = shadowProjection * vec4(shadowCoord.xyz, 1.0);
+
+	shadowCoord.xyz = DistortShadowCoord(shadowCoord.xyz);
+
+    shadowCoord.xyz = shadowCoord.xyz * 0.5 + 0.5;
+
+	#ifdef PIXEL_SHADOWS
+    float shadowDepth = texelFetch(shadowtex0, ivec2(shadowCoord.xy * shadowMapResolution), 0).r;
+	#else
+	float shadowDepth = texture(shadowtex0, shadowCoord.xy, 0).r;
+	#endif
+
+	return shadowCoord.z < shadowDepth ? 1.0 : 0.0;
+}
+
+void main()
+{
+    float depth = texture(depthtex0, io_TexCoord, 0).r;
+    if (depth == 1.0)
+		discard;
+
+	float shadow = GetShadow(io_TexCoord, depth);
+    float ambient = max(0.0, shadow);
+
+    // Normalize and invert direction
+	vec3 lightDirection = shadowLightPosition * -0.01;
+    
+	vec3 normal = texture(colortex1, io_TexCoord, 0).xyz * 2.0 - 1.0;
+	float diffuse = max(0.0, dot(-normal, lightDirection));
+
+	vec3 reflectedLightDirection = reflect(lightDirection, normal);
+	vec3 viewDirection = normalize(ScreenToViewSpace(io_TexCoord, depth).xyz);
+	
+	//float specular = pow(max(0.0, dot(-viewDirection, reflectedLightDirection)), 1);
+	float specular = 0.0;
+
+	float lighting = ambient;
+	if (shadow > 0.0)
+	{
+		lighting += diffuse + specular;
+	}
+
+	vec3 color = texture(colortex0, io_TexCoord, 0).rgb;
+	color *= lighting;
+
+	rt_Color = vec4(color, 1.0);
 }
