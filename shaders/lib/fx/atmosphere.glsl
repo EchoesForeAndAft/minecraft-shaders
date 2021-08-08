@@ -43,32 +43,36 @@ vec3 LightScattering(
 	return color * exposure;
 }
 
-float VolumetricShadow(vec2 texCoord, float depth)
+vec3 VolumetricFog(in vec2 texCoord, in float depth)
 {
 	const int NUM_SAMPLES = 100;
 	const float SAMPLE_DELTA = 1.0 / NUM_SAMPLES;
+	const float DENSITY = 0.2;
 
 	vec3 worldPos = ViewToWorldSpace(ScreenToViewSpace(texCoord, depth)).xyz;
 	vec3 rayDir = normalize(worldPos - cameraPosition);
-
 	float rayDist = length(worldPos - cameraPosition);
-	vec3 rayDelta = rayDir * rayDist * SAMPLE_DELTA;
-	vec3 ray = cameraPosition;
+	vec3 rayDelta = rayDir * (rayDist / NUM_SAMPLES);
 
-	float luma = 0.0;
+	vec3 fog = vec3(0.0);
+	vec3 ray = cameraPosition;
 
 	for (int i = 0; i < NUM_SAMPLES; i++)
 	{
 		vec3 shadowRay = WorldToShadowSpace(vec4(ray, 1.0)).xyz;
 		shadowRay.xyz = shadowRay.xyz * 0.5 + 0.5;
 
-		float shadowDepth = texture2D(shadowtex0, shadowRay.xy).r;
-		luma += shadowRay.z < shadowDepth ? SAMPLE_DELTA : 0.0;
+		float factor = length(ray - cameraPosition);
+		float weight = exp(factor / rayDist);
 
+		float shadowDepth = texture2D(shadowtex0, shadowRay.xy, 0).r;
+		float shadow = shadowRay.z < shadowDepth ? SAMPLE_DELTA : 0.0;
+
+		fog += fogColor * shadow * weight;
 		ray += rayDelta;
 	}
 
-	return luma;
+	return fog * DENSITY;
 }
 
 float Fog(vec2 texCoord, float depth)
