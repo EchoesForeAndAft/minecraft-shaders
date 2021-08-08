@@ -19,7 +19,7 @@ void main()
 {
 	vec4 color = texture2D(texture, io_TextureCoord) * io_VertexColor;
 	color *= texture2D(lightmap, io_LightmapCoord);
-	vec3 normal = texture2D(normals, io_TextureCoord).rgb;
+	vec3 normal = texture2D(normals, io_TextureCoord).rgb * 2.0 - 1.0;
 	normal = io_TbnMatrix * normal;
 
 	rt_Color = color;
